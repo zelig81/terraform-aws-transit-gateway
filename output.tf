@@ -43,7 +43,7 @@ output "this_ec2_transit_gateway_route_table_id" {
 // aws_ec2_transit_gateway_route
 output "this_ec2_transit_gateway_route_ids" {
   description = "List of EC2 Transit Gateway Route Table identifier combined with destination"
-  value       = var.transit_route_tables_map == {} ? aws_ec2_transit_gateway_route.this.*.id : values(aws_ec2_transit_gateway_route.from_var_transit_route_tables_map)[*].id
+  value       = var.transit_route_tables_map == {} ? aws_ec2_transit_gateway_route.this.*.id : [for k,v in aws_ec2_transit_gateway_route.from_var_transit_route_tables_map: v.id]
 }
 
 // aws_ec2_transit_gateway_vpc_attachment

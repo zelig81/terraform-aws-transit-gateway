@@ -1,10 +1,10 @@
-# Complete AWS Transit Gateway example
+# Transit Route Tables map AWS Transit Gateway example
 
 Configuration in this directory creates AWS Transit Gateway, attach VPC to it and share it with other AWS principals using [Resource Access Manager (RAM)](https://aws.amazon.com/ram/) using provided map of transit route tables, routes and propagations.
 
 ## Notes
 
-Tested in Terraform(v0.12.21) and Terragrunt(v0.22.5). This overcome the issue of limitation in Terraform which prevents us from using computed values in `count`. In other case needs to use some other solution for separation of creation VPCs and TGW and what is related to it.
+Tested in Terraform(v0.12.23) and Terragrunt(v0.23.0). This overcome the issue of limitation in Terraform which prevents us from using computed values in `count`. In other case needs to use some other solution for separation of creation VPCs and TGW and what is related to it.
 
 Due to complexity / security concerns, VPN creation still had to be done outside of EC2 Transit Gateway module. It can be imported after of Transit Gateway's creation using `terraform import ...`. The names of resources to be imported can be found in `terraform plan ...` output. Just comment out all that is related to VPN for the first `terraform apply ...` in order to create TGW itself.
 

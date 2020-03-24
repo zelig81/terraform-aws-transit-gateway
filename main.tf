@@ -14,7 +14,10 @@ locals {
 
   map_of_logical_names_vpc_to_attachments_ids = { for vpc_name, attachment in aws_ec2_transit_gateway_vpc_attachment.this : vpc_name => attachment.id }
 
-  map_of_logical_names_vpn_to_attachments_ids = { for vpn_name, attachment in data.aws_ec2_transit_gateway_vpn_attachment.this : vpn_name => attachment.id }
+  map_of_logical_names_vpn_to_attachments_ids = merge(
+    { for vpn_name, attachment in data.aws_ec2_transit_gateway_vpn_attachment.this : vpn_name => attachment.id },
+    { for vpn_name, vpn_connection in aws_vpn_connection.this : vpn_name => vpn_connection.transit_gateway_attachment_id}
+  )
 
   map_of_logical_names_vpn_and_vpc_to_attachments_ids = merge(flatten([
     local.map_of_logical_names_vpc_to_attachments_ids,
@@ -217,10 +220,43 @@ resource "aws_ec2_transit_gateway_route_table_propagation" "this" {
   transit_gateway_route_table_id = coalesce(lookup(each.value, "transit_gateway_route_table_id", null), var.transit_gateway_route_table_id, aws_ec2_transit_gateway_route_table.this[0].id)
 }
 
+#############################
+# VPN creation and attachment
+#############################
+
 data "aws_ec2_transit_gateway_vpn_attachment" "this" {
-  for_each           = var.vpn_attachments
+  for_each           = {for vpn_name, vpn_spec in var.vpn_attachments: vpn_name => vpn_spec if lookup(vpn_spec, "vpn_id", null) != null}
   transit_gateway_id = lookup(each.value, "tgw_id", aws_ec2_transit_gateway.this[0].id)
   vpn_connection_id  = each.value.vpn_id
+}
+
+data "aws_customer_gateway" "this" {
+  for_each = {for vpn_name, vpn_spec in var.vpn_attachments: vpn_name => vpn_spec.customer_gateway_id if lookup(vpn_spec, "customer_gateway_id", null) != null}
+  id = each.value
+}
+
+resource "random_password" "random" {
+  for_each = toset(flatten([
+    for vpn_name, vpn_spec in var.vpn_attachments: [
+      "${vpn_name}#tunnel1_preshared_key",
+      "${vpn_name}#tunnel2_preshared_key"
+    ] if lookup(vpn_spec, "tunnel1_preshared_key", null) == null && lookup(vpn_spec, "tunnel2_preshared_key", null) == null && lookup(vpn_spec, "customer_gateway_id", null) != null
+  ]))
+  length = 60
+  special = true
+  override_special = "._"
+}
+
+resource "aws_vpn_connection" "this" {
+  for_each = {for vpn_name, vpn_spec in var.vpn_attachments: vpn_name => vpn_spec if lookup(vpn_spec, "customer_gateway_id", null) != null}
+  customer_gateway_id = each.value.customer_gateway_id
+  transit_gateway_id  = lookup(each.value, "tgw_id", aws_ec2_transit_gateway.this[0].id)
+  static_routes_only   = lookup(each.value, "static_routes_only", false)
+  type   = lookup(each.value, "type", "ipsec.1")
+  tunnel1_inside_cidr   = lookup(each.value, "tunnel1_inside_cidr", null)
+  tunnel2_inside_cidr   = lookup(each.value, "tunnel2_inside_cidr", null)
+  tunnel1_preshared_key = lookup(each.value, "tunnel1_preshared_key", "key_${random_password.random["${each.key}#tunnel1_preshared_key"].result}")
+  tunnel2_preshared_key = lookup(each.value, "tunnel2_preshared_key", "key_${random_password.random["${each.key}#tunnel2_preshared_key"].result}")
 }
 
 ############################################################################################
